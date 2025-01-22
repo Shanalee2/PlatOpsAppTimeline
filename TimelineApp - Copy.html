@@ -210,8 +210,7 @@
     }
 
     // Format Timeline Header
-    function formatTimelineHeader() {
-      const date = formatTimelineDate();
+    function formatTimelineHeader(date) {
       const activityType = activityTypeSelect.value;
       return `Timeline ${date}<br>For aks-xxx-xxx-xxx ${activityType}`;
     }
@@ -226,7 +225,7 @@
           // Add new date header if the date changes
           if (item.date !== currentDate) {
             currentDate = item.date;
-            timelineBox.innerHTML += `<h3>${formatTimelineHeader()}</h3>`;
+            timelineBox.innerHTML += `<h3>${formatTimelineHeader(currentDate)}</h3>`;
           }
           timelineBox.innerHTML += `<p>${item.entry}</p>`;
         });
