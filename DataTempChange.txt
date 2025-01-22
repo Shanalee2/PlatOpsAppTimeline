@@ -1,0 +1,9 @@
+const originalDate = Date; // Store the original Date constructor
+
+// Override the Date constructor
+Date = function() {
+  return new originalDate('2025-01-22T00:00:00'); // Change to your desired date and time
+};
+
+// Test by logging the new date
+console.log(new Date()); // It should return '2025-01-22T00:00:00'
