@@ -220,18 +220,26 @@
     // Timezone conversion function
     function getCurrentTimeInTimezone(timezone) {
       const now = new Date();
+      const options = {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: ''
+      };
+
       switch (timezone) {
         case "HKT":
-          now.setHours(now.getHours() + 8);
+          options.timeZone = 'Asia/Hong_Kong';
           break;
         case "EST":
-          now.setHours(now.getHours() - 5);
+          options.timeZone = 'America/New_York';
           break;
         case "IST":
-          now.setHours(now.getHours() + 5.5);
+          options.timeZone = 'Asia/Kolkata';
           break;
       }
-      return now.toISOString().slice(0, 19).replace("T", " ");
+
+      return new Intl.DateTimeFormat('en-US', options).format(now);
     }
 
     // Format Date for Timeline Header
@@ -254,7 +262,7 @@
         let currentDate = '';
         storedTimeline.forEach(item => {
           // Add new date header if the date changes
-          if (item.date !== currentDate) {
+          if (!currentDate) {
             currentDate = item.date;
             timelineBox.innerHTML += `<h3>${formatTimelineHeader(currentDate)}</h3>`;
           }
@@ -286,6 +294,14 @@
       // Save the entry to localStorage with today's date and time
       const storedTimeline = JSON.parse(localStorage.getItem("timeline")) || [];
       const today = formatTimelineDate();
+
+      // Add timeline header if it's the first entry
+      if (storedTimeline.length === 0) {
+        timelineBox.innerHTML += `<h3>Timeline ${today}<br>For aks-xxx-xxx-xxx ${activityTypeSelect.value}</h3>`;
+      } else if (!timelineBox.querySelector('h3')) {
+        timelineBox.innerHTML += `<h3>Timeline ${today}<br>For aks-xxx-xxx-xxx ${activityTypeSelect.value}</h3>`;
+      }
+
       storedTimeline.push({ date: today, entry });
 
       localStorage.setItem("timeline", JSON.stringify(storedTimeline));
