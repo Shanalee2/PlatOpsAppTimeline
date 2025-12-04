@@ -77,6 +77,7 @@
       <option value="Config Server (RCS) Upgrade">Config Server (RCS) Upgrade</option>
       <option value="HBT Upgrade">HBT Upgrade</option>
       <option value="Certificate Renewal Istio Ingress Gateway">Certificate Renewal Istio Ingress Gateway</option>
+      <option value="Certificate renewal for APIM">Certificate renewal for APIM</option>
     </select>
 
     <!-- Canned Text Selection -->
@@ -187,8 +188,18 @@
         "Port forward and test the connection",
         "Get rsf-hbt-app logs",
         "Unset the variable and perform curl on ext endpoint"
-      ]
-    };
+      ],
+      "Certificate renewal for APIM": [
+        "Pre-checks done",
+        "started uploading certs to apim instance in azure portal",
+        "Saved the uploaded certs",
+        "certs uploaded successfully, expiry date updated in azure portal",
+        "Post check Done",
+        "Jenkins pipeline started",
+        "Pipeline completed",
+        "Post Verification done in Yoda Portal"
+        ]
+    }
 
     // Cache DOM elements
     const activityTypeSelect = document.getElementById("activity-type");
