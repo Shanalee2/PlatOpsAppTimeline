@@ -1,0 +1,388 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Teams Incident Post Builder (2 Inputs • HKT • No Asterisks)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f172a; --card: #111827; --muted: #94a3b8; --text: #e5e7eb;
+      --accent: #38bdf8; --accent2: #22c55e; --danger: #ef4444; --border: #1f2937;
+      --btn: #1d4ed8; --btn-hover: #2563eb;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; background: var(--bg); color: var(--text); font-family: var(--sans); }
+    h1 { font-size: 1.5rem; margin: 0 0 8px; }
+    .sub { color: var(--muted); margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input[type="text"], textarea, select {
+      width: 100%; background: #0b1220; color: var(--text);
+      border: 1px solid var(--border); border-radius: 10px; padding: 10px;
+      font-size: 0.95rem;
+    }
+    textarea { min-height: 220px; resize: vertical; }
+    .row { display: flex; gap: 12px; margin-top: 12px; }
+    .row > div { flex: 1; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--btn); color: white; border: none; border-radius: 8px;
+      padding: 10px 14px; font-weight: 600; cursor: pointer;
+    }
+    .btn:hover { background: var(--btn-hover); }
+    .btn.secondary { background: #374151; }
+    .btn.secondary:hover { background: #4b5563; }
+    .btn.success { background: var(--accent2); }
+    .btn.danger { background: var(--danger); }
+    .small { color: var(--muted); font-size: 0.85rem; }
+    .output {
+      font-family: var(--mono); white-space: pre-wrap; background: #0b1220;
+      border: 1px dashed var(--border); border-radius: 12px; padding: 14px;
+      line-height: 1.55;
+    }
+    .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #0b3b4d; color: #a5f3fc; font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; }
+    .footer-note { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+    details { margin-top: 10px; }
+    summary { cursor: pointer; color: var(--accent); }
+    .kv { font-family: var(--mono); font-size: 0.92rem; color: #cbd5e1; }
+    .kv b { color: #e2e8f0; }
+    .heading { text-transform: uppercase; letter-spacing: 0.02em; font-weight: 700; }
+    .title { font-weight: 700; font-size: 1.05rem; }
+  </style>
+</head>
+<body>
+  <h1>Teams Incident Post Builder</h1>
+  <div class="sub"></div>
+
+  <div class="grid">
+    <!-- Inputs -->
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="incidentNumber">Incident Ticket</label>
+          <input id="incidentNumber" type="text" placeholder="e.g., INC08160570" />
+          <div class="small">If left blank, we’ll try to parse <code>INC\d+</code> from the raw data.</div>
+        </div>
+        <div>
+          <label for="notifType">Notification Type</label>
+          <select id="notifType">
+            <option value="Initial Notification">Initial Notification</option>
+            <option value="Update">Update</option>
+            <option value="Resolved">Resolved</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="incidentRaw" style="margin-top:10px;">Raw Incident Data</label>
+      <textarea id="incidentRaw" placeholder="Paste the full incident text here, e.g.:
+Errors installing Connect on Forge Apps in Confluence
+Incident Report for Confluence
+Subscribe to Updates
+Identified
+Our team has identified a root cause...
+Posted 3 minutes ago. Dec 11, 2025 - 02:08 UTCINC08160570"></textarea>
+
+      <div class="row">
+        <button class="btn success" id="generate">Generate Teams Post</button>
+        <button class="btn secondary" id="loadExample">Load Example</button>
+        <button class="btn danger" id="clear">Clear</button>
+      </div>
+      <div class="footer-note">
+        Supported time strings: <code>Dec 11, 2025 - 02:08 UTC</code>, <code>2025-12-11T02:08Z</code>, <code>2025-12-11 02:08 +00:00</code>, etc.
+        If none are found, current time in <b>HKT</b> (UTC+8) is used.
+      </div>
+
+      <details>
+        <summary>Show extracted fields (debug)</summary>
+        <div class="kv" id="debug"></div>
+      </details>
+    </div>
+
+    <!-- Output -->
+    <div class="card">
+      <div class="pill">Teams Preview</div>
+      <div class="output" id="output"></div>
+      <div class="row">
+        <button class="btn" id="copy"><span>📋</span>Copy to Clipboard</button>
+      </div>
+      <div class="footer-note">Paste directly into your Teams channel.</div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Time Parsing to HKT =====
+    function parseToDate(input) {
+      if (!input || !input.trim()) return new Date(); // fallback: now
+      let s = input.trim();
+      s = s.replace(/\s-\s/, ' ');
+      s = s.replace(/(\d)(UTC)$/i, '$1 UTC');
+      s = s.replace(/\bHKT\b/i, '+08:00');
+      let d = new Date(s);
+      if (!isNaN(d)) return d;
+
+      const monthNames = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+      const m = s.match(/^\s*([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(Z|UTC|[+-]\d{2}:?\d{2})?\s*$/i);
+      if (m) {
+        const mon = monthNames[m[1].slice(0,3).toLowerCase()];
+        const day = parseInt(m[2], 10);
+        const year = parseInt(m[3], 10);
+        const hour = parseInt(m[4], 10);
+        const minute = parseInt(m[5], 10);
+        const second = m[6] ? parseInt(m[6], 10) : 0;
+        const tz = m[7] ? m[7].toUpperCase() : null;
+        let millis = Date.UTC(year, mon, day, hour, minute, second);
+        if (tz && tz !== 'UTC' && tz !== 'Z') {
+          const tzMatch = tz.match(/^([+-])(\d{2}):?(\d{2})$/);
+          if (tzMatch) {
+            const sign = tzMatch[1] === '+' ? 1 : -1;
+            const offH = parseInt(tzMatch[2], 10);
+            const offM = parseInt(m[3], 10);
+          }
+        }
+        d = new Date(millis);
+        if (!isNaN(d)) return d;
+      }
+
+      const isoNoColon = s.match(/^\s*(\d{4}-\d{2}-\d{2}) T(?::\d{2})?\s*([+-]\d{4}|Z|UTC)\s*$/i);
+      if (isoNoColon) {
+        let base = isoNoColon[1] + 'T' + isoNoColon[2] + ':00';
+        let tz = isoNoColon[3].toUpperCase();
+        if (tz === 'UTC') tz = 'Z';
+        if (/^[+-]\d{4}$/.test(tz)) {
+          tz = tz.slice(0,3) + ':' + tz.slice(3);
+        }
+        d = new Date(base + tz);
+        if (!isNaN(d)) return d;
+      }
+
+      return new Date();
+    }
+
+    function formatHKT(date) {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Hong_Kong',
+        year: 'numeric', month: 'short', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false
+      }).formatToParts(date);
+
+      const get = (type) => parts.find(p => p.type === type)?.value || '';
+      const month = get('month');
+      const day = get('day');
+      const year = get('year');
+      const hour = get('hour');
+      const minute = get('minute');
+      return `${month} ${day}, ${year} - ${hour}:${minute} HKT`;
+    }
+
+    // ===== Incident Parsing =====
+    function extractTicketFromRaw(raw) {
+      const m = raw.match(/\bINC\d+\b/);
+      return m ? m[0] : '';
+    }
+
+    function extractPostedDateString(raw) {
+      // Prefer the last occurrence (often the latest update)
+      const patterns = [
+        /[A-Za-z]{3,9}\s+\d{1,2},\s*\d{4}\s*-\s*\d{2}:\d{2}\s*(?:UTC|Z|[A-Za-z]{3}|[+-]\d{2}:?\d{2})/g,
+        /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?\s*(?:Z|UTC|[+-]\d{2}:?\d{2})/g
+      ];
+      let match = null;
+      for (const re of patterns) {
+        const arr = raw.match(re);
+        if (arr && arr.length) match = arr[arr.length - 1];
+        if (match) break;
+      }
+      return match || '';
+    }
+
+    function extractShortDescription(lines) {
+      for (const line of lines) {
+        const s = line.trim();
+        if (!s) continue;
+        if (/^subscribe to updates$/i.test(s)) continue;
+        if (/^incident report for/i.test(s)) continue;
+        if (/^(identified|investigating|monitoring|resolved|in progress|update)$/i.test(s)) continue;
+        return s;
+      }
+      return '';
+    }
+
+    function extractServices(raw, lines, shortdesc) {
+      const m = raw.match(/incident report for\s+([^\n]+)/i);
+      if (m) return m[1].trim();
+
+      const s = shortdesc.toLowerCase();
+      const parts = [];
+      if (s.includes('confluence')) parts.push('Confluence');
+      if (s.includes('forge')) parts.push('Forge Apps');
+      else if (s.includes('app') && s.includes('confluence')) parts.push('Apps');
+      const svc = parts.join(' ');
+      return svc || 'Confluence';
+    }
+
+    function extractStatus(lines) {
+      for (const line of lines) {
+        const s = line.trim();
+        const m = s.match(/^(identified|investigating|monitoring|resolved|in progress|update)$/i);
+        if (m) return m[1];
+      }
+      return '';
+    }
+
+    function extractDescription(raw, lines) {
+      const statusIdx = lines.findIndex(l => /^(identified|investigating|monitoring|resolved|in progress|update)$/i.test(l.trim()));
+      let start = statusIdx >= 0 ? statusIdx + 1 : 0;
+      while (start < lines.length && !lines[start].trim()) start++;
+
+      let end = lines.length;
+      for (let i = start; i < lines.length; i++) {
+        const s = lines[i];
+        if (/^posted\b/i.test(s) || /\bINC\d+\b/.test(s) ||
+            /[A-Za-z]{3,9}\s+\d{1,2},\s*\d{4}\s*-\s*\d{2}:\d{2}/.test(s)) {
+          end = i; break;
+        }
+      }
+
+      const descLines = lines.slice(start, end);
+      while (descLines.length && !descLines[0].trim()) descLines.shift();
+      while (descLines.length && !descLines[descLines.length - 1].trim()) descLines.pop();
+      return descLines.join('\n');
+    }
+
+    function parseIncident(raw, ticketManual) {
+      const cleaned = (raw || '').replace(/\r\n/g, '\n').trim();
+      const lines = cleaned.split('\n').map(l => l.replace(/\s+$/,''));
+
+      const shortdesc = extractShortDescription(lines);
+      const services = extractServices(cleaned, lines, shortdesc);
+      const status = extractStatus(lines); // optional
+      const desc = extractDescription(cleaned, lines);
+      const ticketParsed = extractTicketFromRaw(cleaned);
+      const ticket = (ticketManual && ticketManual.trim()) || ticketParsed || '';
+      const postedStr = extractPostedDateString(cleaned);
+      const postedAtHKT = formatHKT(parseToDate(postedStr));
+
+      return { services, shortdesc, desc, ticket, postedAtHKT, status };
+    }
+
+    // ===== Teams Rendering =====
+    function renderTeamsPost(data, notificationType) {
+      const { services, shortdesc, desc, ticket, postedAtHKT } = data;
+
+      return [
+        'INCIDENT NOTIFICATION',
+        `${notificationType || 'Initial Notification'}`,
+        '',
+        'Service(s) Impacted:',
+        `${services}`,
+        '',
+        'Short Description:',
+        `${shortdesc}`,
+        '',
+        'Description:',
+        `${desc}`,
+        '',
+        'Incident Ticket:',
+        `${ticket || 'N/A'}`,
+        '',
+        'Posted At:',
+        `${postedAtHKT}`,
+        '',
+        '---',
+        '',
+        'We are actively monitoring the situation and coordinating with internal teams. Further updates will be shared as soon as available.',
+        '',
+        'Best regards,',
+        'GOCC Platform Operations'
+      ].join('\n');
+    }
+
+    // ===== UI Wiring =====
+    const els = {
+      ticket: document.getElementById('incidentNumber'),
+      raw: document.getElementById('incidentRaw'),
+      notifType: document.getElementById('notifType'),
+      output: document.getElementById('output'),
+      debug: document.getElementById('debug'),
+      generate: document.getElementById('generate'),
+      loadExample: document.getElementById('loadExample'),
+      clear: document.getElementById('clear'),
+      copy: document.getElementById('copy')
+    };
+
+    function update() {
+      const data = parseIncident(els.raw.value, els.ticket.value);
+      els.output.textContent = renderTeamsPost(data, els.notifType.value);
+      els.debug.innerHTML = `
+<b>Notification Type:</b> ${els.notifType.value}<br/>
+<b>Service(s) Impacted:</b> ${data.services}<br/>
+<b>Short Description:</b> ${data.shortdesc}<br/>
+<b>Status (parsed):</b> ${data.status || '—'}<br/>
+<b>Incident Ticket:</b> ${data.ticket || '—'}<br/>
+<b>Posted At (HKT):</b> ${data.postedAtHKT}<br/>
+<b>Description (verbatim):</b><br/><pre style="white-space:pre-wrap;margin:6px 0;background:#0b1220;padding:8px;border-radius:8px;border:1px dashed #1f2937;color:#e5e7eb;">${data.desc}</pre>
+      `;
+    }
+
+    function loadExample() {
+      els.notifType.value = 'Initial Notification';
+      els.ticket.value = 'INC08160570';
+      els.raw.value = [
+        'Errors installing Connect on Forge Apps in Confluence',
+        'Incident Report for Confluence',
+        'Subscribe to Updates',
+        'Identified',
+        'Our team has identified a root cause for this issue, and have now commenced a rollback of the problematic change and verifying that this is resolved.',
+        '',
+        'There should not be any impact to currently installed apps as a result of this incident. However, we are aware that cloud migrations including Confluence Apps may also currently be blocked by this issue.',
+        '',
+        'We currently expect the rollback and validation of the fix to be completed within 3 hours. We will update further at that time with the latest status.',
+        'Posted 3 minutes ago. Dec 11, 2025 - 02:08 UTCINC08160570'
+      ].join('\n');
+      update();
+    }
+
+    function clearForm() {
+      els.ticket.value = '';
+      els.raw.value = '';
+      els.output.textContent = '';
+      els.debug.textContent = '';
+      els.notifType.value = 'Initial Notification';
+    }
+
+    async function copyOutput() {
+      const text = els.output.textContent;
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        const orig = els.copy.textContent;
+        els.copy.textContent = '✅ Copied!';
+        setTimeout(() => { els.copy.textContent = orig; }, 1500);
+      } catch {
+        window.getSelection().removeAllRanges();
+        const range = document.createRange();
+        range.selectNode(els.output);
+        window.getSelection().addRange(range);
+        alert('Copied preview selection. Press Ctrl+C / Cmd+C to copy.');
+      }
+    }
+
+    // Events
+    els.generate.addEventListener('click', update);
+    els.loadExample.addEventListener('click', loadExample);
+    els.clear.addEventListener('click', clearForm);
+    els.copy.addEventListener('click', copyOutput);
+    els.raw.addEventListener('input', update);
+    els.ticket.addEventListener('input', update);
+    els.notifType.addEventListener('change', update);
+
+    // Initial
+    loadExample();
+  </script>
+</body>
+</html>
